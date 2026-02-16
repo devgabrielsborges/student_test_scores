@@ -16,3 +16,6 @@ uv.lock
 
 data
 
+*.csv
+*.png
+*.jpg
