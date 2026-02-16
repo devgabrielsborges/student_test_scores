@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "boto3>=1.37.0",
     "dvc>=3.66.1",
     "fastparquet>=2025.12.0",
     "matplotlib>=3.10.8",
@@ -12,6 +13,7 @@ dependencies = [
     "numpy>=2.4.1",
     "optuna>=4.7.0",
     "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.10",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "torch>=2.10.0",

@@ -16,6 +16,8 @@ from sklearn.linear_model import SGDRegressor
 from sklearn.metrics import (mean_absolute_error, mean_squared_error, r2_score,
                              root_mean_squared_error)
 from sklearn.model_selection import cross_val_score
+
+from config.mlflow_config import get_artifact_location, setup_mlflow
 from preprocessing.preprocess import Preprocess
 
 # Add parent directory to path for imports
@@ -191,7 +193,14 @@ def generate_submission(model, output_path="submission.csv"):
 def train_with_mlflow(X_train, y_train, X_test, y_test, n_trials=100):
     """Train model with Optuna and MLflow tracking."""
 
-    mlflow.set_experiment("Student Scores - SGDRegressor Optuna")
+    # Configure MLflow for PostgreSQL + MinIO
+    setup_mlflow()
+
+    # Set experiment with S3 artifact location
+    experiment = mlflow.set_experiment(
+        "Student Scores - SGDRegressor Optuna",
+        artifact_location=get_artifact_location(),
+    )
 
     with mlflow.start_run(run_name="SGDRegressor_Optuna") as run:
         study = optimize_with_optuna(X_train, y_train, n_trials=n_trials)
