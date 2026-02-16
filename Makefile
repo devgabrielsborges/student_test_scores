@@ -50,7 +50,7 @@ clean:
 ui:
 	@echo "Starting MLflow UI..."
 	@echo "Open http://localhost:5000 in your browser"
-	mlflow ui --backend-store-uri postgresql://mlflow:mlflow@localhost:5432/mlflow_db \
+	uv run mlflow ui --backend-store-uri postgresql://mlflow:mlflow@localhost:5432/mlflow_db \
 	          --default-artifact-root s3://mlflow-artifacts/ \
 	          --host 0.0.0.0
 
