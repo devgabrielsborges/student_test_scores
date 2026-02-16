@@ -50,6 +50,9 @@ clean:
 ui:
 	@echo "Starting MLflow UI..."
 	@echo "Open http://localhost:5000 in your browser"
+	AWS_ACCESS_KEY_ID=minioadmin \
+	AWS_SECRET_ACCESS_KEY=minioadmin \
+	MLFLOW_S3_ENDPOINT_URL=http://localhost:9000 \
 	uv run mlflow ui --backend-store-uri postgresql://mlflow:mlflow@localhost:5432/mlflow_db \
 	          --default-artifact-root s3://mlflow-artifacts/ \
 	          --host 0.0.0.0
