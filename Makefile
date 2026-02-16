@@ -64,11 +64,8 @@ install:
 
 train-all:
 	@echo "Training all models..."
-	cd src/models && uv run linear.py
-	cd src/models && uv run ridge.py
-	cd src/models && uv run sgdc.py
-	cd src/models && uv run svm.py
-	cd src/models && uv run rf.py
-	cd src/models && uv run gb.py
-	cd src/models && uv run xgb.py
+	@cd src/models && for model in *.py; do \
+		echo "Running $$model..."; \
+		uv run $$model || exit 1; \
+	done
 	@echo "✓ All models trained"
