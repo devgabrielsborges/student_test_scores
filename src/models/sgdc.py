@@ -1,0 +1,278 @@
+"""
+SGDRegressor Training Script for Student Test Scores with Optuna
+
+This script trains a Stochastic Gradient Descent Regressor model with
+hyperparameter tuning using Optuna and tracks experiments using MLflow.
+"""
+
+import sys
+from pathlib import Path
+
+import mlflow
+import mlflow.sklearn
+import optuna
+import pandas as pd
+from sklearn.linear_model import SGDRegressor
+from sklearn.metrics import (mean_absolute_error, mean_squared_error, r2_score,
+                             root_mean_squared_error)
+from sklearn.model_selection import cross_val_score
+from preprocessing.preprocess import Preprocess
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def load_processed_data(data_dir: str = "../../data/processed"):
+    """Load preprocessed training and test data."""
+    data_path = Path(data_dir)
+
+    X_train = pd.read_parquet(data_path / "X_train.parquet")
+    y_train = pd.read_parquet(data_path / "y_train.parquet").squeeze()
+    X_test = pd.read_parquet(data_path / "X_test.parquet")
+    y_test = pd.read_parquet(data_path / "y_test.parquet").squeeze()
+
+    print("✓ Data loaded:")
+    print(f"  - Training set: {X_train.shape}")
+    print(f"  - Test set: {X_test.shape}")
+
+    return X_train, X_test, y_train, y_test
+
+
+def evaluate_model(model, X_test, y_test):
+    """Evaluate model and return metrics."""
+    y_pred = model.predict(X_test)
+
+    metrics = {
+        "mse": mean_squared_error(y_test, y_pred),
+        "rmse": root_mean_squared_error(y_test, y_pred, squared=False),
+        "mae": mean_absolute_error(y_test, y_pred),
+        "r2": r2_score(y_test, y_pred),
+    }
+
+    return metrics, y_pred
+
+
+def objective(trial, X_train, y_train):
+    """
+    Optuna objective function for hyperparameter optimization.
+
+    Args:
+        trial: Optuna trial object
+        X_train: Training features
+        y_train: Training target
+
+    Returns:
+        Mean cross-validation score
+    """
+    params = {
+        "loss": trial.suggest_categorical(
+            "loss", ["squared_error", "huber", "epsilon_insensitive"]
+        ),
+        "penalty": trial.suggest_categorical("penalty", ["l2", "l1", "elasticnet"]),
+        "alpha": trial.suggest_float("alpha", 1e-5, 1e-1, log=True),
+        "max_iter": trial.suggest_int("max_iter", 1000, 5000),
+        "tol": trial.suggest_float("tol", 1e-5, 1e-2, log=True),
+        "learning_rate": trial.suggest_categorical(
+            "learning_rate", ["constant", "optimal", "invscaling", "adaptive"]
+        ),
+        "eta0": trial.suggest_float("eta0", 0.001, 0.1, log=True),
+        "random_state": 42,
+    }
+
+    if params["penalty"] == "elasticnet":
+        params["l1_ratio"] = trial.suggest_float("l1_ratio", 0.0, 1.0)
+
+    model = SGDRegressor(**params)
+
+    cv_scores = cross_val_score(
+        model, X_train, y_train, cv=5, scoring="neg_root_mean_squared_error", n_jobs=-1
+    )
+
+    return cv_scores.mean()
+
+
+def optimize_with_optuna(X_train, y_train, n_trials=100):
+    """
+    Optimize hyperparameters using Optuna.
+
+    Args:
+        X_train: Training features
+        y_train: Training target
+        n_trials: Number of optimization trials
+
+    Returns:
+        Optuna study object
+    """
+    print(f"\n🔍 Starting Optuna optimization with {n_trials} trials...")
+
+    study = optuna.create_study(
+        direction="maximize",
+        study_name="sgd_student_scores",
+        sampler=optuna.samplers.TPESampler(seed=42),
+    )
+
+    study.optimize(
+        lambda trial: objective(trial, X_train, y_train),
+        n_trials=n_trials,
+        show_progress_bar=True,
+    )
+
+    print("\n✓ Optimization completed!")
+    print(f"✓ Best trial: {study.best_trial.number}")
+    print(f"✓ Best CV score: {study.best_value:.4f}")
+    print("✓ Best parameters:")
+    for key, value in study.best_params.items():
+        print(f"    {key}: {value}")
+
+    return study
+
+
+def train_best_model(best_params, X_train, y_train, X_test, y_test):
+    """Train final model with best parameters."""
+
+    model = SGDRegressor(**best_params, random_state=42)
+
+    print("\n🚀 Training final model with best parameters...")
+    model.fit(X_train, y_train)
+
+    metrics, y_pred = evaluate_model(model, X_test, y_test)
+
+    print("\n📊 Test Set Performance:")
+    print(f"  - MSE:  {metrics['mse']:.4f}")
+    print(f"  - RMSE: {metrics['rmse']:.4f}")
+    print(f"  - MAE:  {metrics['mae']:.4f}")
+    print(f"  - R²:   {metrics['r2']:.4f}")
+
+    return model, metrics
+
+
+def generate_submission(model, output_path="submission.csv"):
+    """Generate submission file for Kaggle competition."""
+    print("\n📝 Generating submission file...")
+
+    # Load raw test data
+    test_df = pd.read_csv("../../data/raw/playground-series-s6e1/test.csv")
+    test_ids = test_df["id"].copy()
+
+    # Load training data to fit the scaler
+    train_df = pd.read_csv("../../data/raw/playground-series-s6e1/train.csv")
+
+    # Preprocess training data to fit scaler
+    train_prep = Preprocess(train_df.copy())
+    train_prep.preprocess()
+    X_train_full = train_prep.data.drop(columns=["exam_score", "id"])
+    train_prep.scaler.fit(X_train_full)
+
+    # Preprocess test data
+    test_prep = Preprocess(test_df.copy())
+    test_prep.preprocess()
+    X_test_submission = test_prep.data.drop(columns=["id"])
+
+    # Apply same scaling
+    X_test_submission = pd.DataFrame(
+        train_prep.scaler.transform(X_test_submission),
+        columns=X_test_submission.columns,
+    )
+
+    # Make predictions
+    predictions = model.predict(X_test_submission)
+
+    # Create submission file
+    submission = pd.DataFrame({"id": test_ids, "exam_score": predictions})
+
+    submission.to_csv(output_path, index=False)
+    print(f"✓ Submission file saved to {output_path}")
+    print(f"  - Shape: {submission.shape}")
+    print(f"  - Sample predictions: {predictions[:5]}")
+
+    return submission
+
+
+def train_with_mlflow(X_train, y_train, X_test, y_test, n_trials=100):
+    """Train model with Optuna and MLflow tracking."""
+
+    mlflow.set_experiment("Student Scores - SGDRegressor Optuna")
+
+    with mlflow.start_run(run_name="SGDRegressor_Optuna") as run:
+        study = optimize_with_optuna(X_train, y_train, n_trials=n_trials)
+
+        best_model, metrics = train_best_model(
+            study.best_params, X_train, y_train, X_test, y_test
+        )
+
+        mlflow.log_params(study.best_params)
+        mlflow.log_param("n_trials", n_trials)
+        mlflow.log_param("best_trial_number", study.best_trial.number)
+
+        mlflow.log_metrics(metrics)
+        mlflow.log_metric("best_cv_score", study.best_value)
+
+        trials_df = study.trials_dataframe()
+        trials_df.to_csv("optuna_trials.csv", index=False)
+        mlflow.log_artifact("optuna_trials.csv")
+
+        mlflow.sklearn.log_model(
+            best_model,
+            "model",
+            registered_model_name="SGDRegressor_StudentScores_Optuna",
+            input_example=X_train.iloc[:5],
+            signature=mlflow.models.signature.infer_signature(X_train, y_train),
+        )
+
+        # Generate submission file
+        generate_submission(best_model, "sgd_regressor_submission.csv")
+        mlflow.log_artifact("sgd_regressor_submission.csv")
+
+        try:
+            import matplotlib.pyplot as plt
+
+            optuna.visualization.matplotlib.plot_optimization_history(study)
+            plt.tight_layout()
+            plt.savefig("optimization_history.png", dpi=150, bbox_inches="tight")
+            mlflow.log_artifact("optimization_history.png")
+            plt.close()
+
+            optuna.visualization.matplotlib.plot_param_importances(study)
+            plt.tight_layout()
+            plt.savefig("param_importances.png", dpi=150, bbox_inches="tight")
+            mlflow.log_artifact("param_importances.png")
+            plt.close()
+
+            print("\n✓ Optimization plots saved")
+
+        except Exception as e:
+            print(f"\n⚠ Could not generate plots: {e}")
+
+        print(f"\n✓ MLflow run completed: {run.info.run_id}")
+        print("✓ Model logged and registered")
+
+        return best_model, study, metrics
+
+
+def main(n_trials=100):
+    """
+    Main execution function.
+
+    Args:
+        n_trials: Number of Optuna trials for optimization
+    """
+
+    print("=" * 60)
+    print("STUDENT TEST SCORES PREDICTION - SGDREGRESSOR (OPTUNA)")
+    print("=" * 60)
+
+    X_train, X_test, y_train, y_test = load_processed_data()
+
+    model, study, metrics = train_with_mlflow(
+        X_train, y_train, X_test, y_test, n_trials=n_trials
+    )
+
+    print("\n" + "=" * 60)
+    print("TRAINING COMPLETED SUCCESSFULLY")
+    print("=" * 60)
+
+    return model, study
+
+
+if __name__ == "__main__":
+    model, study = main(n_trials=200)
