@@ -185,14 +185,16 @@ def train_with_mlflow(X_train, y_train, X_test, y_test, n_trials=100):
     # Set experiment with S3 artifact location
     experiment_name = "Student Scores - Linear Regression Optuna"
     try:
-        experiment_id = mlflow.create_experiment(
+        mlflow.create_experiment(
             experiment_name,
             artifact_location=get_artifact_location(),
         )
-        experiment = mlflow.get_experiment(experiment_id)
     except Exception:
         # Experiment already exists
-        experiment = mlflow.set_experiment(experiment_name)
+        pass
+
+    # Set the experiment as active
+    mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name="LinearRegression_Optuna") as run:
         study = optimize_with_optuna(X_train, y_train, n_trials=n_trials)
