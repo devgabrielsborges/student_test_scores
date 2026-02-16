@@ -16,11 +16,11 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import cross_val_score
 
-from config.mlflow_config import get_artifact_location, setup_mlflow
-from preprocessing.preprocess import Preprocess
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.mlflow_config import get_artifact_location, setup_mlflow
+from preprocessing.preprocess import Preprocess
 
 
 def load_processed_data(data_dir: str = "../../data/processed"):
