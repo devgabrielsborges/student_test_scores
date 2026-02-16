@@ -17,7 +17,6 @@ from sklearn.metrics import (mean_absolute_error, mean_squared_error, r2_score,
                              root_mean_squared_error)
 from sklearn.model_selection import cross_val_score
 
-
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.mlflow_config import get_artifact_location, setup_mlflow
@@ -197,10 +196,16 @@ def train_with_mlflow(X_train, y_train, X_test, y_test, n_trials=100):
     setup_mlflow()
 
     # Set experiment with S3 artifact location
-    experiment = mlflow.set_experiment(
-        "Student Scores - SGDRegressor Optuna",
-        artifact_location=get_artifact_location(),
-    )
+    experiment_name = "Student Scores - SGDRegressor Optuna"
+    try:
+        experiment_id = mlflow.create_experiment(
+            experiment_name,
+            artifact_location=get_artifact_location(),
+        )
+        experiment = mlflow.get_experiment(experiment_id)
+    except Exception:
+        # Experiment already exists
+        experiment = mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name="SGDRegressor_Optuna") as run:
         study = optimize_with_optuna(X_train, y_train, n_trials=n_trials)
