@@ -1,4 +1,4 @@
-.PHONY: help start stop restart logs clean ui install
+.PHONY: help start stop restart logs clean ui install dvc-push dvc-pull dvc-status
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,9 @@ help:
 	@echo "  make ui         - Start MLflow UI"
 	@echo "  make install    - Install Python dependencies"
 	@echo "  make status     - Check service status"
+	@echo "  make dvc-push   - Push data to MinIO remote storage"
+	@echo "  make dvc-pull   - Pull data from MinIO remote storage"
+	@echo "  make dvc-status - Check DVC status"
 
 start:
 	@echo "Starting MLflow infrastructure..."
@@ -69,3 +72,17 @@ train-all:
 		uv run $$model || exit 1; \
 	done
 	@echo "✓ All models trained"
+
+dvc-push:
+	@echo "Pushing data to MinIO remote storage..."
+	uv run dvc push
+	@echo "✓ Data pushed successfully"
+
+dvc-pull:
+	@echo "Pulling data from MinIO remote storage..."
+	uv run dvc pull
+	@echo "✓ Data pulled successfully"
+
+dvc-status:
+	@echo "Checking DVC status..."
+	uv run dvc status
